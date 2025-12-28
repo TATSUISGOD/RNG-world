@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>RNG Gacha Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{
+  margin:0;
+  font-family:sans-serif;
+  color:#fff;
+  text-align:center;
+  background:#000;
+  transition:background 1s;
+}
+button{
+  padding:10px 20px;
+  font-size:16px;
+  margin:5px;
+}
+.hidden{display:none}
+#rollText{
+  font-size:32px;
+  margin-top:40px;
+}
+#result{
+  font-size:40px;
+  margin-top:20px;
+}
+#overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  z-index:10;
+}
+.card{
+  padding:20px;
+  margin:10px;
+  border-radius:10px;
+}
+.Common{color:#aaa}
+.Rare{color:#4af}
+.Epic{color:#c6f}
+.Legend{color:gold}
+.Mythic{
+  background:linear-gradient(45deg,red,orange,yellow,green,cyan,blue,purple);
+  -webkit-background-clip:text;
+  color:transparent;
+  font-weight:bold;
+}
+#dex{
+  max-height:70vh;
+  overflow:auto;
+}
+</style>
+</head>
+<body>
+
+<h1>🌌 RNG Gacha 🌌</h1>
+
+<p>
+🎲 ガチャ回数: <span id="count">0</span> / 天井: 100  
+</p>
+
+<button onclick="rollGacha()">🎰 ガチャ</button>
+<button onclick="showDex()">📖 図鑑</button>
+
+<div id="rollText"></div>
+<div id="result"></div>
+
+<div id="overlay" class="hidden"></div>
+
+<script>
+/* ===== データ ===== */
+const rarityOrder=["Common","Rare","Epic","Legend","Mythic"];
+
+const pool=[
+  {name:"Dust Aura",rarity:"Common",bg:"#222"},
+  {name:"Stone Aura",rarity:"Common",bg:"#333"},
+  {name:"Blue Spark",rarity:"Rare",bg:"#003"},
+  {name:"Crimson Flame",rarity:"Rare",bg:"#300"},
+  {name:"Void Pulse",rarity:"Epic",bg:"#202"},
+  {name:"Heaven Light",rarity:"Epic",bg:"#224"},
+  {name:"Solar Crown",rarity:"Legend",bg:"#440"},
+  {name:"Dragon Halo",rarity:"Legend",bg:"#431"},
+  {name:"Abyss King",rarity:"Mythic",bg:"#100"},
+  {name:"Celestial God",rarity:"Mythic",bg:"#013"}
+];
+
+const rates=[
+  {r:"Mythic",p:1},
+  {r:"Legend",p:4},
+  {r:"Epic",p:15},
+  {r:"Rare",p:30},
+  {r:"Common",p:50}
+];
+
+let rolls=+localStorage.getItem("rolls")||0;
+let pity=+localStorage.getItem("pity")||0;
+let dex=JSON.parse(localStorage.getItem("dex")||"{}");
+let currentBg=JSON.parse(localStorage.getItem("bg")||"null");
+
+/* ===== 表示更新 ===== */
+const countEl=document.getElementById("count");
+countEl.textContent=rolls;
+if(currentBg)document.body.style.background=currentBg.bg;
+
+/* ===== ガチャ ===== */
+function rollGacha(){
+  rolls++; pity++;
+  localStorage.setItem("rolls",rolls);
+  countEl.textContent=rolls;
+
+  let rarity;
+  if(pity>=100){
+    rarity="Legend";
+    pity=0;
+  }else{
+    let r=Math.random()*100,s=0;
+    for(const g of rates){
+      s+=g.p;
+      if(r<s){rarity=g.r;break;}
+    }
+  }
+  localStorage.setItem("pity",pity);
+
+  const list=pool.filter(x=>x.rarity===rarity);
+  const item=list[Math.floor(Math.random()*list.length)];
+
+  animateRoll(item);
+}
+
+/* ===== 演出 ===== */
+function animateRoll(item){
+  const rollText=document.getElementById("rollText");
+  const result=document.getElementById("result");
+  rollText.textContent="";
+  result.textContent="";
+
+  let steps=["???","???","???",item.rarity,item.name];
+  let i=0;
+  let int=setInterval(()=>{
+    rollText.textContent=steps[i];
+    i++;
+    if(i>=steps.length){
+      clearInterval(int);
+      showResult(item);
+    }
+  },400);
+}
+
+/* ===== 結果 ===== */
+function showResult(item){
+  const result=document.getElementById("result");
+  result.innerHTML=`<span class="${item.rarity}">${item.name}</span>`;
+
+  dex[item.name]=item;
+  localStorage.setItem("dex",JSON.stringify(dex));
+
+  const high = rank(item.rarity)>=rank("Legend");
+  if(high){
+    handleBg(item);
+  }else{
+    document.body.style.background=item.bg;
+    currentBg=item;
+    localStorage.setItem("bg",JSON.stringify(item));
+  }
+}
+
+/* ===== 背景処理 ===== */
+function handleBg(item){
+  if(!currentBg || rank(item.rarity)>rank(currentBg.rarity)){
+    applyBg(item);
+    return;
+  }
+  if(rank(item.rarity)>=rank("Legend")){
+    askBg(item);
+  }
+}
+
+function applyBg(item){
+  document.body.style.background=item.bg;
+  currentBg=item;
+  localStorage.setItem("bg",JSON.stringify(item));
+}
+
+function askBg(item){
+  const o=document.getElementById("overlay");
+  o.classList.remove("hidden");
+  o.innerHTML=`
+    <h2>背景を変更しますか？</h2>
+    <p>${item.name}</p>
+    <button onclick="applyBg(${JSON.stringify(item)});closeOverlay()">はい</button>
+    <button onclick="closeOverlay()">いいえ</button>
+  `;
+}
+
+function closeOverlay(){
+  document.getElementById("overlay").classList.add("hidden");
+}
+
+/* ===== 図鑑 ===== */
+function showDex(){
+  const o=document.getElementById("overlay");
+  o.classList.remove("hidden");
+  let h="<h2>📖 図鑑</h2><div id='dex'>";
+  for(const k in dex){
+    const d=dex[k];
+    h+=`<div class="card ${d.rarity}">${d.name} (${d.rarity})</div>`;
+  }
+  h+="</div><br><button onclick='closeOverlay()'>閉じる</button>";
+  o.innerHTML=h;
+}
+
+/* ===== ランク ===== */
+function rank(r){return rarityOrder.indexOf(r);}
+</script>
+
+</body>
+</html>
